@@ -51,13 +51,13 @@ func (c *Config) SanityCheck() {
 		for _, iface := range domain.Interfaces {
 			if iface.MatchUnknown4 {
 				if foundMatchUnknown4 {
-					log.Fatal("Duplicate matchUnknown4 in domain %s", domain.Name)
+					log.Fatalf("Duplicate matchUnknown4 in domain %s", domain.Name)
 				}
 				foundMatchUnknown4 = true
 			}
 			if iface.MatchUnknown6 {
 				if foundMatchUnknown6 {
-					log.Fatal("Duplicate matchUnknown6 in domain %s", domain.Name)
+					log.Fatalf("Duplicate matchUnknown6 in domain %s", domain.Name)
 				}
 				foundMatchUnknown6 = true
 			}
