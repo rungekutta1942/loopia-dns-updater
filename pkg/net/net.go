@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// Carrier-grade NAT range (RFC 6598). Not reachable from the internet,
+// but not covered by IsPrivate.
+var cgnat = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+
 type Address struct {
 	Ipv4 net.Addr
 	Ipv6 net.Addr
@@ -43,6 +47,10 @@ func GetGlobalAddresses(config config.Config) (map[string]Address, error) {
 					return nil, err
 				}
 				slog.Debug(fmt.Sprintf("Found address %s", ip))
+				if cgnat.Contains(ip) {
+					slog.Warn(fmt.Sprintf("Skipping carrier-grade NAT address %s on %s", ip, i.Name))
+					continue
+				}
 				if ip.IsGlobalUnicast() && !ip.IsPrivate() {
 					if strings.Contains(ip.String(), ":") {
 						slog.Debug(fmt.Sprintf("Adding global IPv6 address %s for %s", addr, i.Name))
