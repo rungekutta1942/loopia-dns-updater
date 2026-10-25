@@ -38,7 +38,7 @@ func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry boo
 				if addr, ok := addresses[iface.IfName]; ok && addr.Ipv6 != nil {
 					matchUnknown6 = addr.Ipv6
 				} else {
-					log.Fatalf("Interface %s is set to match unknown IPv4 but has no public address", iface.IfName)
+					log.Fatalf("Interface %s is set to match unknown IPv6 but has no public address", iface.IfName)
 				}
 			}
 			for _, fqdn := range iface.Match4 {
@@ -104,7 +104,7 @@ func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry boo
 			if ifName, ok := ifByFqdn6[fqdn]; ok {
 				addr, ok := addresses[ifName]
 				if !ok || addr.Ipv6 == nil {
-					log.Fatalf("No IPv4 address found for %s", ifName)
+					log.Fatalf("No IPv6 address found for %s", ifName)
 				}
 				newIp, err := applyNet(record.Value, addr.Ipv6)
 				if err != nil {
