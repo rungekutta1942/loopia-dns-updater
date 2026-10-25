@@ -8,7 +8,13 @@ import (
 	"log"
 	"log/slog"
 	gonet "net"
+	"time"
 )
+
+// Loopia allows at most 60 API calls per minute, see
+// https://support.loopia.com/wiki/loopia-api-before-you-begin/
+// One call per second keeps every run below that limit.
+const loopiaCallInterval = time.Second
 
 func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry bool) {
 	client, err := loopia.New(conf.Loopia.Username, conf.Loopia.Password)
@@ -49,12 +55,14 @@ func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry boo
 			}
 		}
 		slog.Info(fmt.Sprintf("Processing domain %s", domain.Name))
+		time.Sleep(loopiaCallInterval)
 		subdomains, err := client.GetSubdomains(domain.Name)
 		if err != nil {
 			log.Fatal(err)
 		}
 		for _, subdomain := range subdomains {
 			slog.Debug(fmt.Sprintf("Processing subdomain %s", subdomain.Name))
+			time.Sleep(loopiaCallInterval)
 			records, err := client.GetZoneRecords(domain.Name, subdomain.Name)
 			if err != nil {
 				log.Fatal(err)
@@ -156,6 +164,7 @@ func updateIfNeeded(client *loopia.API, newIp string, record loopia.Record, doma
 		} else {
 			slog.Info(fmt.Sprintf("Updating %s to %s for %s of type %s", record.Value, newIp, fqdn, record.Type))
 			record.Value = newIp
+			time.Sleep(loopiaCallInterval)
 			status, err := client.UpdateZoneRecord(domain, subdomain, record)
 			if err != nil {
 				if status != nil {
