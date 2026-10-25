@@ -36,6 +36,8 @@ func ReadConfig(fileName string) (Config, error) {
 
 	var cfg Config
 	decoder := yaml.NewDecoder(f)
+	// Fail on unknown keys, so typos in the config are reported.
+	decoder.SetStrict(true)
 	err = decoder.Decode(&cfg)
 	if err != nil {
 		return cfg, err
