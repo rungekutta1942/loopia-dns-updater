@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -61,7 +62,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	changed, err := checkIfChanged(addresses, *dataDir)
+	ipState := calculateIpState(addresses, conf)
+	changed, err := checkIfChanged(ipState, *dataDir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -75,11 +77,11 @@ func main() {
 		slog.Info("Interfaces have not changed IP")
 	}
 	if !*dry {
-		writeIpState(addresses, *dataDir)
+		writeIpState(ipState, *dataDir)
 	}
 }
 
-func checkIfChanged(addresses map[string]net.Address, dataDir string) (bool, error) {
+func checkIfChanged(newIps string, dataDir string) (bool, error) {
 	if _, err := os.Stat(dataDir); errors.Is(err, os.ErrNotExist) {
 		err := os.Mkdir(dataDir, 0o700)
 		if err != nil {
@@ -99,20 +101,18 @@ func checkIfChanged(addresses map[string]net.Address, dataDir string) (bool, err
 		return true, nil
 	}
 	oldIps := string(oldIpsBytes)
-	newIps := calculateIpState(addresses)
 	if oldIps != newIps {
-		slog.Info(fmt.Sprintf("IP addresses have changed:\nOld:\n%s\nNew:\n%s", oldIps, newIps))
+		slog.Info(fmt.Sprintf("IP addresses or config have changed:\nOld:\n%s\nNew:\n%s", oldIps, newIps))
 	}
 	return oldIps != newIps, nil
 }
 
-func writeIpState(addresses map[string]net.Address, dataDir string) {
-	newIps := calculateIpState(addresses)
+func writeIpState(newIps string, dataDir string) {
 	dataFile := path.Join(dataDir, "ifstate")
 	_ = os.WriteFile(dataFile, []byte(newIps), 0o600)
 }
 
-func calculateIpState(addresses map[string]net.Address) string {
+func calculateIpState(addresses map[string]net.Address, conf config.Config) string {
 	ifLines := make([]string, 0, 10)
 	for ifName, addr := range addresses {
 		var ipv4 string
@@ -130,6 +130,8 @@ func calculateIpState(addresses map[string]net.Address) string {
 	for _, l := range ifLines {
 		b.WriteString(l + "\n")
 	}
+	// Include the config, so config changes are applied without an IP change.
+	b.WriteString(fmt.Sprintf("config-%x\n", sha256.Sum256([]byte(fmt.Sprintf("%v", conf)))))
 	newIps := b.String()
 	return newIps
 }
