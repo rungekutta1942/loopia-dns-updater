@@ -100,3 +100,12 @@ Configuration items:
 | loopia.username                  | Loopia API user. The user will call GetSubdomains, GetZoneRecords and UpdateZoneRecord                  |
 | loopia.password                  | Loopia API password                                                                                     |
 | executeOnChange                  | Command to execute if the relevant IPs are changed                                                      |
+
+Notes:
+
+- The domain itself (the apex) is named `@` in Loopia, so write it as
+  `@.example.com` in `match4`, `match6` and `ignore`. Writing
+  `example.com` matches nothing.
+- `executeOnChange` is split on spaces and run without a shell, so quotes,
+  pipes, redirects and `&&` don't work. Put anything more than a simple
+  command in a script and point `executeOnChange` at it.
