@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"errors"
 	"fmt"
 	"github.com/johanatandromeda/loopia-dns-updater/pkg/config"
 	"github.com/johanatandromeda/loopia-dns-updater/pkg/net"
@@ -10,11 +11,16 @@ import (
 	gonet "net"
 )
 
-func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry bool) {
+// loopia-go reports a rejected request in status, not in err.
+const loopiaSuccess = "success"
+
+// UpdateRecords returns an error if any record update failed.
+func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry bool) error {
 	client, err := loopia.New(conf.Loopia.Username, conf.Loopia.Password)
 	if err != nil {
 		log.Fatal(err)
 	}
+	failed := false
 	for _, domain := range conf.Domains {
 		aByName := make(map[string]loopia.Record)
 		aaaaByName := make(map[string]loopia.Record)
@@ -85,7 +91,9 @@ func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry boo
 					log.Fatal(err)
 				}
 				slog.Debug(fmt.Sprintf("Checking whether match known IPv4 %s is set for %s (current value %s)", ifIp, subdomain, record.Value))
-				updateIfNeeded(client, ifIp.String(), record, domain.Name, subdomain, dry)
+				if err := updateIfNeeded(client, ifIp.String(), record, domain.Name, subdomain, dry); err != nil {
+					failed = true
+				}
 			} else if matchUnknown4 != nil {
 				if _, found := ignored[fqdn]; !found {
 					ifIp, _, err := gonet.ParseCIDR(matchUnknown4.String())
@@ -93,7 +101,9 @@ func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry boo
 						log.Fatal(err)
 					}
 					slog.Debug(fmt.Sprintf("Checking whether match unknown IPv4 %s is set for %s (current value %s)", ifIp, subdomain, record.Value))
-					updateIfNeeded(client, ifIp.String(), record, domain.Name, subdomain, dry)
+					if err := updateIfNeeded(client, ifIp.String(), record, domain.Name, subdomain, dry); err != nil {
+						failed = true
+					}
 				} else {
 					slog.Debug(fmt.Sprintf("Ignoring %s from match unknown4", fqdn))
 				}
@@ -111,7 +121,9 @@ func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry boo
 					log.Fatal(err)
 				}
 				slog.Debug(fmt.Sprintf("Checking whether match known IPv6 %s is set for %s (current value %s)", newIp, subdomain, record.Value))
-				updateIfNeeded(client, newIp, record, domain.Name, subdomain, dry)
+				if err := updateIfNeeded(client, newIp, record, domain.Name, subdomain, dry); err != nil {
+					failed = true
+				}
 			} else if matchUnknown6 != nil {
 				if _, found := ignored[fqdn]; !found {
 					newIp, err := applyNet(record.Value, matchUnknown6)
@@ -119,13 +131,19 @@ func UpdateRecords(conf config.Config, addresses map[string]net.Address, dry boo
 						log.Fatal(err)
 					}
 					slog.Debug(fmt.Sprintf("Checking whether match unknown IPv6 %s is set for %s (current value %s)", newIp, subdomain, record.Value))
-					updateIfNeeded(client, newIp, record, domain.Name, subdomain, dry)
+					if err := updateIfNeeded(client, newIp, record, domain.Name, subdomain, dry); err != nil {
+						failed = true
+					}
 				} else {
 					slog.Debug(fmt.Sprintf("Ignoring %s from match unknown6", fqdn))
 				}
 			}
 		}
 	}
+	if failed {
+		return errors.New("one or more DNS updates failed")
+	}
+	return nil
 }
 
 func applyNet(addr string, ifAddr gonet.Addr) (string, error) {
@@ -148,7 +166,7 @@ func applyNet(addr string, ifAddr gonet.Addr) (string, error) {
 	return newIp.String(), nil
 }
 
-func updateIfNeeded(client *loopia.API, newIp string, record loopia.Record, domain string, subdomain string, dry bool) {
+func updateIfNeeded(client *loopia.API, newIp string, record loopia.Record, domain string, subdomain string, dry bool) error {
 	fqdn := subdomain + "." + domain
 	if newIp != record.Value {
 		if dry {
@@ -157,15 +175,16 @@ func updateIfNeeded(client *loopia.API, newIp string, record loopia.Record, doma
 			slog.Info(fmt.Sprintf("Updating %s to %s for %s of type %s", record.Value, newIp, fqdn, record.Type))
 			record.Value = newIp
 			status, err := client.UpdateZoneRecord(domain, subdomain, record)
+			if err == nil && status.Status != loopiaSuccess {
+				err = fmt.Errorf("Loopia answered %s", status.Cause)
+			}
 			if err != nil {
-				if status != nil {
-					slog.Error(fmt.Sprintf("Update failed for %s of type %s due to %s", fqdn, record.Type, status.Cause))
-				} else {
-					slog.Error(fmt.Sprintf("Update failed for %s of type %s", fqdn, record.Type))
-				}
+				slog.Error(fmt.Sprintf("Update failed for %s of type %s: %s", fqdn, record.Type, err))
+				return err
 			}
 		}
 	} else {
 		slog.Debug("No update required")
 	}
+	return nil
 }

@@ -70,7 +70,10 @@ func main() {
 		if strings.TrimSpace(conf.ExecuteOnChange) != "" {
 			os_util.ExecuteCmd(conf.ExecuteOnChange, *dry)
 		}
-		dns.UpdateRecords(conf, addresses, *dry)
+		if err := dns.UpdateRecords(conf, addresses, *dry); err != nil {
+			// Exit before saving the IP state, so the next run retries.
+			log.Fatal(err)
+		}
 	} else {
 		slog.Info("Interfaces have not changed IP")
 	}
