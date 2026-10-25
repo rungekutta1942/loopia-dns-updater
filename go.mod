@@ -1,6 +1,6 @@
 module github.com/johanatandromeda/loopia-dns-updater
 
-go 1.25.1
+go 1.26.10
 
 require (
 	github.com/jonlil/loopia-go v0.0.0-20220617090554-b07b4c905b28
